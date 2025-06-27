@@ -73,7 +73,7 @@ def bot(prompt):
 
             resposta = chatbot.send_message(mensagem_usuario)
 
-            if len(chatbot.history) > 4:
+            if len(chatbot.history) > 8:
                 chatbot.history = remover_mensagens_mais_antigas(chatbot.history)
 
             print(f"Quantidade: {len(chatbot.history)}\n{chatbot.history}")
