@@ -25,8 +25,22 @@ async function pegarImagem() {
         miniaturaImagem.style.margin = '0.5rem'; 
 
         document.querySelector('.entrada__container').insertBefore(miniaturaImagem, input);
+
+        let formData = new FormData();
+        formData.append('imagem', imagemSelecionada);
+
+        const response = await fetch('http://127.0.0.1:5000/upload_imagem', {
+            method: 'POST',
+            body: formData
+        });
+
+        const resposta = await response.text();
+        console.log(resposta);
+        console.log(imagemSelecionada);
     }
+    fileInput.click();
 }
+
 async function enviarMensagem() {
     if(input.value == "" || input.value == null) return;
     let mensagem = input.value;
@@ -78,3 +92,5 @@ input.addEventListener("keyup", function(event) {
         botaoEnviar.click();
     }
 });
+
+botaoAnexo.addEventListener("click", pegarImagem);
