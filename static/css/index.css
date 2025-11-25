@@ -32,7 +32,12 @@ body {
 .cabecalho__acoes {
     display: flex;
     align-items: center;
-    gap: 2rem;
+    gap: 20rem;
+}
+
+.logo {
+    width: 250px;
+    height: auto;
 }
 
 @media screen and (min-width: 1400px) {
@@ -78,7 +83,7 @@ body {
 }
 
 .chat__bolha--bot {
-    background-color: #4A42B8;
+    background-color: #144480;
 }
 
 .chat__bolha--bot::after {
@@ -98,7 +103,7 @@ body {
 }
 
 .chat__bolha--usuario {
-    border: 1px solid #7B71FF;
+    border: 1px solid #24abe3;
     align-self: flex-end;
 }
 
@@ -125,7 +130,7 @@ body {
     gap: 1.5rem;
     justify-content: stretch;
     align-items: center;
-    border-top: 1px solid #144480;
+    border-top: 1px solid #8cbccc;
 }
 
 .entrada__container {
@@ -137,7 +142,7 @@ body {
     padding: 0 0.5rem;
 
     background-color: #144480;
-    border: 1px solid #0C305C;
+    border: 1px solid #24abe3;
     border-radius: 4rem;
 }
 
@@ -163,8 +168,8 @@ body {
     height: 4rem;
     width: 4rem;
 
-    background-color: #1C5296;
-    border: 1px solid #0C305C;
+    background-color: #144480;
+    border: 1px solid #24abe3;
     border-radius: 50%;
 }
 

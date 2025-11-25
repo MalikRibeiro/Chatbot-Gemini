@@ -1,131 +1,87 @@
-from flask import Flask,render_template, request, Response
-import google.generativeai as genai
+from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 import os
-from time import sleep
-from helper import carrega, salva
-from selecionar_persona import personas, selecionar_persona
-from gerenciar_historico import remover_mensagens_mais_antigas
 import uuid
-from gerenciar_imagem import gerar_imagem_gemini
+import requests
 
+# Carrega variáveis de ambiente (se houver alguma)
 load_dotenv()
 
-CHAVE_API_GOOGLE = os.getenv("GEMINI_API_KEY")
-MODELO_ESCOLHIDO = "gemini-1.5-flash"   
-genai.configure(api_key=CHAVE_API_GOOGLE)
+# --- CONFIGURAÇÕES ---
+MODELO_OLLAMA = "llama3.2"
+URL_OLLAMA = "http://127.0.0.1:11434/api/chat"
+# -------------------------------------
 
+
+# Inicializa o aplicativo Flask
 app = Flask(__name__)
-app.secret_key = 'alura'
+app.secret_key = 'alura' 
 
-contexto = carrega("dados\musimart.txt")
-
-caminho_imagem_enviada = None
+# Define e cria a pasta para uploads, se não existir
 UPLOAD_FOLDER = "imagens_temporarias"
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
-def criar_chatbot():
-    personalidade = "neutro"
 
-    prompt_do_sistema = f"""
-            # PERSONA
-            
-            Você é um chatbot de atendimento a clientes de um e-commerce. 
-            Você não deve responder perguntas que não sejam dados do ecommerce informado!
-            
-            Você deve utilizar apenas dados que estejam dentro do 'contexto'
-            
-            # CONTEXTO
-            {contexto}
-            
-            # PERSONALIDADE
-            {personalidade}
-
-            # Histórico
-            Acesse sempre o histórico de mensagens, e recupere informações ditas anteriormente.
-            """
-    
-    configuracao_modelo = {
-        "temperature" : 0.1,
-        "max_output_tokens" : 8192
+def gerar_resposta_com_ollama(prompt_completo):
+    """
+    Envia um prompt para o servidor Ollama e retorna a resposta do modelo.
+    """
+    payload = {
+        "model": MODELO_OLLAMA,
+        "stream": False,
+        "messages": [{"role": "user", "content": prompt_completo}]
     }
-
-    llm = genai.GenerativeModel(
-        model_name=MODELO_ESCOLHIDO,
-        system_instruction=prompt_do_sistema,
-        generation_config=configuracao_modelo
-    )
-
-    chatbot = llm.start_chat(history=[])
-
-    return chatbot
-
-chatbot = criar_chatbot()
-
-def bot(prompt):
-    maximo_tentativas = 1
-    repeticao = 0
-    global caminho_imagem_enviada
-
-    while True:
-        try:
-            personalidade = personas[selecionar_persona(prompt)]
-            mensagem_usuario = f"""
-            Considere esta personalidade para responder a mensagem:
-            {personalidade}
-        
-            Responda a seguinte mensagem, sempre lembrando do histórico:
-            {prompt}
-            """
-
-            if caminho_imagem_enviada:
-                mensagem_usuario += "\n Utilize as caracteristicas da imagem em sua resposta"
-                arquivo_imagem = gerar_imagem_gemini(caminho_imagem_enviada)
-                resposta = chatbot.send_message([arquivo_imagem, mensagem_usuario])
-                os.remove(caminho_imagem_enviada)
-                caminho_imagem_enviada = None
-            else:
-                resposta = chatbot.send_message(mensagem_usuario)
- 
-            if len(chatbot.history) > 8:
-                chatbot.history = remover_mensagens_mais_antigas(chatbot.history)
-
-            print(f"Quantidade: {len(chatbot.history)}\n{chatbot.history}")
-            
-            return resposta.text
-
-        except Exception as erro:
-            repeticao += 1
-            if repeticao >= maximo_tentativas:
-                return "Erro no Gemini: %s" % erro
-            
-            if caminho_imagem_enviada:
-                os.remove(caminho_imagem_enviada)
-                caminho_imagem_enviada = None
-            
-            sleep(50)
-
-@app.route("/upload_imagem", methods=["POST"])
-def upload_imagem():
-    global caminho_imagem_enviada
     
-    if "imagem" in request.files:
-        imagem_enviada = request.files["imagem"]
-        nome_arquivo = str(uuid.uuid4()) + os.path.splitext(imagem_enviada.filename)[1]
-        caminho_arquivo = os.path.join(UPLOAD_FOLDER, nome_arquivo)
-        imagem_enviada.save(caminho_arquivo)
-        caminho_imagem_enviada = caminho_arquivo
-        return "Imagem enviada com sucesso!", 200
-    return "Nenhuma imagem enviada.", 400
+    try:
+        # Usamos flush=True para garantir que a mensagem apareça no terminal imediatamente.
+        print(f"Enviando para o modelo '{MODELO_OLLAMA}'. Aguardando...", flush=True)
+        response = requests.post(URL_OLLAMA, json=payload, timeout=90.0)
+        response.raise_for_status()
+        result = response.json()
+        print("Resposta recebida do Ollama.", flush=True)
+        return result["message"]["content"]
+        
+    except requests.exceptions.Timeout:
+        print("Erro: Timeout ao contatar o Ollama.", flush=True)
+        return "Desculpe, o modelo demorou demais para responder."
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao se comunicar com o Ollama: {e}", flush=True)
+        return f"Não consegui me conectar ao cérebro de IA. Verifique se o Ollama está rodando."
+    except Exception as e:
+        print(f"Erro inesperado na geração de resposta: {e}", flush=True)
+        return "Ocorreu um erro inesperado ao processar sua mensagem."
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    prompt = request.json["msg"]
-    resposta = bot(prompt)
-    return resposta
+    """
+    Endpoint principal do chat. Recebe a mensagem do usuário, constrói o 
+    prompt e obtém a resposta do Ollama.
+    """
+    prompt_usuario = request.json.get("msg")
+    if not prompt_usuario:
+        return jsonify({"response": "Nenhuma mensagem recebida."}), 400
+
+    print(f"\nMensagem recebida do usuário: {prompt_usuario}", flush=True)
+
+    # --- MUDANÇA PARA DEPURAÇÃO ---
+    # Para este teste, estamos enviando APENAS a mensagem do usuário,
+    # sem nenhuma instrução extra. O objetivo é replicar a velocidade
+    # do script 'diagnostico_ollama.py'.
+    prompt_completo = prompt_usuario
+    # --- FIM DA MUDANÇA ---
+
+    resposta_bot = gerar_resposta_com_ollama(prompt_completo)
+    return jsonify({"response": resposta_bot})
 
 @app.route("/")
 def home():
+    """Serve a página inicial do chat."""
     return render_template("index.html")
 
 if __name__ == "__main__":
-    app.run(debug = True)
+    print("--- Servidor Flask do Chatbot Electra (MODO DE DEPURAÇÃO) ---")
+    print(f"Usando o modelo Ollama: {MODELO_OLLAMA}")
+    print(f"Conectando ao Ollama em: {URL_OLLAMA}")
+    print("Acesse em: http://127.0.0.1:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False) # Debug desligado para evitar reinicializações
